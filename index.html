@@ -791,10 +791,10 @@ body.light-mode .modal-content {
 
     /* Compact table rows to fit more names */
     .table-responsive {
-        overflow-x: visible; /* Let it stretch the body */
+        overflow-x: auto; /* Fix scrolling on mobile */
     }
     .modern-table {
-        min-width: 100%;
+        min-width: 500px; /* Ensure names are not cut off */
     }
     .modern-table th, .modern-table td {
         padding: 8px 10px;
@@ -1601,7 +1601,12 @@ window.updateCustomerInline = function(id, field, value) {
 
 function updateTotals() {
     let totalWallet = wallets
-        .filter(w => (!w.isSubLedger || (w.isSubLedger && w.includeInTotal)) && !w.name.includes('الاهلي') && !w.name.includes('الأهلي'))
+        .filter(w => {
+            const n = w.name;
+            if(n.includes('الاهلي') || n.includes('الأهلي') || n.includes('طلب')) return false;
+            if(w.isSubLedger && !w.includeInTotal) return false;
+            return true;
+        })
         .reduce((sum, w) => sum + (parseInt(w.balance) || 0), 0);
         
     let totalCustomers = customers.reduce((sum, c) => sum + (parseInt(c.balance) || 0), 0);
