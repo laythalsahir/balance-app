@@ -951,7 +951,7 @@ body.light-mode .logs-section {
                     <div class="stat-box" style="flex: 1; display: flex; flex-direction: column; align-items: flex-end; position: relative;">
                         <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; display: flex; align-items: center; gap: 6px;">
                             <i class="fa-solid fa-circle" style="color: var(--positive); font-size: 8px; animation: pulse 2s infinite;"></i>
-                            <span>المستخدم: <span id="current-user">أنت (محلي)</span></span>
+                            <span>المستخدم: <span id="current-user" onclick="changeUserName()" style="cursor: pointer; text-decoration: underline;" title="تغيير الاسم">مستخدم</span></span>
                         </div>
                         <span class="stat-label">المجموع الكلي</span>
                         <span class="stat-value" id="total-balance">0 د.ع</span>
@@ -1339,7 +1339,8 @@ function saveState(actionDescription) {
     
     // Add log
     const now = new Date();
-    const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0');
+    // format to YYYY-MM-DD HH:MM
+    const timeStr = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     logs.unshift({ time: timeStr, desc: actionDescription, user: currentUser });
     
     // Limit history and logs size
@@ -1396,9 +1397,20 @@ function renderLogs() {
         return;
     }
     logs.forEach(log => {
+        let timeDisplay = log.time;
+        if (typeof timeDisplay === 'string' && timeDisplay.includes('T')) {
+            const d = new Date(timeDisplay);
+            if (!isNaN(d)) {
+                if (d.getFullYear() === 1899) {
+                    timeDisplay = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+                } else {
+                    timeDisplay = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                }
+            }
+        }
         list.innerHTML += `
             <div class="log-item">
-                <span class="log-time">${log.time}</span>
+                <span class="log-time" style="font-size: 11px;">${timeDisplay}</span>
                 <span style="font-weight: bold; margin: 0 10px;">[${log.user}]</span>
                 <span>${log.desc}</span>
             </div>
@@ -1409,17 +1421,6 @@ function renderLogs() {
 
 // Theme Logic (Manual vs Auto)
 function initTheme() {
-    currentUser = localStorage.getItem('username');
-    if (!currentUser) {
-        currentUser = "مستخدم";
-        if (!currentUser) currentUser = 'مستخدم مجهول';
-        localStorage.setItem('username', currentUser);
-    }
-    
-    // Direct DOM manipulation since this is called at the end of body
-    const el = document.getElementById('current-user');
-    if (el) el.textContent = currentUser;
-
     const savedTheme = localStorage.getItem('themePref');
     
     if (savedTheme === 'light') {
@@ -1569,7 +1570,8 @@ function renderCustomers(data = customers) {
                     placeholder="...">
             </td>
             <td>
-                <div class="action-buttons">
+                <div class="action-buttons" style="display:flex; gap:5px;">
+                    <button class="btn-icon" onclick="reorderCustomer(${customer.id})" title="نقل السطر"><i class="fa-solid fa-bars"></i></button>
                     <button class="btn-icon delete" onclick="deleteCustomer(${customer.id})" title="حذف السطر"><i class="fa-solid fa-trash"></i></button>
                 </div>
             </td>
@@ -1602,8 +1604,8 @@ window.updateCustomerInline = function(id, field, value) {
 function updateTotals() {
     let totalWallet = wallets
         .filter(w => {
-            const n = w.name;
-            if(n.includes('الاهلي') || n.includes('الأهلي') || n.includes('طلب')) return false;
+            const n = w.name.toLowerCase();
+            if(n.includes('الاهلي') || n.includes('الأهلي') || n.includes('طلب') || n.includes('superqi') || n.includes('nbi')) return false;
             if(w.isSubLedger && !w.includeInTotal) return false;
             return true;
         })
@@ -1812,6 +1814,27 @@ document.getElementById('wallet-form').addEventListener('submit', function(e) {
     showToast('<i class="fa-solid fa-check"></i> تم تحديث المحفظة');
 });
 
+window.reorderCustomer = function(id) {
+    const currentIndex = customers.findIndex(c => c.id === id);
+    if(currentIndex === -1) return;
+    
+    let newPos = prompt(`أدخل الترتيب الجديد للزبون (من 1 إلى ${customers.length}):`, currentIndex + 1);
+    if(!newPos) return;
+    
+    newPos = parseInt(newPos) - 1;
+    if(isNaN(newPos) || newPos < 0 || newPos >= customers.length) {
+        alert('الرقم غير صحيح!');
+        return;
+    }
+    
+    saveState('تغيير ترتيب زبون');
+    const cust = customers.splice(currentIndex, 1)[0];
+    customers.splice(newPos, 0, cust);
+    
+    renderCustomers();
+    syncDataToCloud();
+}
+
 // Delete Data
 window.deleteCustomer = function(id) {
     const cust = customers.find(c => c.id === id);
@@ -1854,6 +1877,22 @@ window.showToast = function(msgHTML) {
 }
 
 // Init
+currentUser = localStorage.getItem('hotspot_user_name');
+if (!currentUser) {
+    currentUser = "مستخدم";
+}
+document.getElementById('current-user').textContent = currentUser;
+
+window.changeUserName = function() {
+    let newName = prompt("أدخل اسمك الجديد:", currentUser);
+    if (newName && newName.trim() !== "") {
+        currentUser = newName.trim();
+        localStorage.setItem('hotspot_user_name', currentUser);
+        document.getElementById('current-user').textContent = currentUser;
+        showToast('<i class="fa-solid fa-check"></i> تم حفظ الاسم');
+    }
+}
+
 initTheme();
 syncDataFromCloud();
 
